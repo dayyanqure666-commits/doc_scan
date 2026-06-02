@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # DocScan — Production Document Scanner App
 
 A production-quality Flutter document scanner app that captures, enhances,
@@ -57,3 +58,6 @@ Future<void> _startScan() async {
 ```
 
 This provides automatic edge detection, perspective correction, and cropping.
+=======
+# doc_scan
+>>>>>>> 0ace2f1158b5ab3d0d950fe60b014a393f029f96
