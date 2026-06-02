@@ -3,8 +3,10 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/models/scan_page.dart';
+import '../../core/services/app_state.dart';
 import '../crop/crop_controller.dart';
 import '../crop/crop_painter.dart';
 import '../crop/perspective_transform_service.dart';
@@ -64,22 +66,28 @@ class _CropScreenState extends State<CropScreen> {
         ? widget.page.processedImagePath
         : widget.page.originalImagePath;
 
-      final imageFile = File(imagePath);
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final s = appState.settings;
 
-      final bytes = await imageFile.readAsBytes();
+      final bytes = await File(imagePath).readAsBytes();
 
-      final srcPoints =
-          _controller.points
-              .map(
-                (p) => Point<double>(p.x, p.y),
-              )
-              .toList();
+      Uint8List transformed;
+      if (s.enableDeskew) {
+        final srcPoints =
+            _controller.points
+                .map(
+                  (p) => Point<double>(p.x, p.y),
+                )
+                .toList();
 
-      final Uint8List transformed =
-           PerspectiveTransformService.transform(
-            imageBytes: bytes,
-            srcPoints: srcPoints,
-          );
+        transformed =
+             PerspectiveTransformService.transform(
+              imageBytes: bytes,
+              srcPoints: srcPoints,
+            );
+      } else {
+        transformed = bytes;
+      }
 
       final dir = await getApplicationDocumentsDirectory();
 
@@ -91,9 +99,10 @@ class _CropScreenState extends State<CropScreen> {
       final page = widget.page;
 
       await ImageProcessor().processImage(
-      newPath,
-      page.settings,
-      newPath,
+        newPath,
+        page.settings,
+        newPath,
+        appSettings: s,
       );
       widget.onDone(
         newPath,

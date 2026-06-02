@@ -1,11 +1,17 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/models/scan_document.dart';
 import '../../core/models/scan_page.dart';
+import '../../core/services/app_state.dart';
 import '../../core/services/image_processor.dart';
+import '../crop/edge_detection_service.dart';
+import '../crop/perspective_transform_service.dart';
 import '../preview/preview_screen.dart';
 
 class CameraCaptureScreen extends StatefulWidget {
@@ -173,6 +179,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
   Future<void> _capturePhoto() async {
     if (_controller == null || !_controller!.value.isInitialized || _isCapturing) return;
 
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final s = appState.settings;
+
     setState(() => _isCapturing = true);
 
     try {
@@ -189,16 +198,40 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
       final originalFile = File(photo.path);
       await originalFile.copy(originalPath);
 
+      List<CropPoint> cropPoints = const [];
+      String cropInputPath = originalPath;
+
+      if (s.enableAutoCrop) {
+        cropPoints = await EdgeDetectionService.detectEdges(originalPath);
+        if (s.enableDeskew && cropPoints.isNotEmpty) {
+          try {
+            final bytes = await File(originalPath).readAsBytes();
+            final srcPoints = cropPoints.map((p) => Point<double>(p.x, p.y)).toList();
+            final transformed = PerspectiveTransformService.transform(
+              imageBytes: bytes,
+              srcPoints: srcPoints,
+            );
+            final tempDir = await getTemporaryDirectory();
+            final tempCroppedPath = '${tempDir.path}/${pageId}_cropped.png';
+            await File(tempCroppedPath).writeAsBytes(transformed);
+            cropInputPath = tempCroppedPath;
+          } catch (e) {
+            debugPrint('Auto crop transform error: $e');
+          }
+        }
+      }
+
       // Generate processed/enhanced copy
       await _processor.processImage(
-        originalPath,
+        cropInputPath,
         const EnhancementSettings(),
         processedPath,
+        appSettings: s,
       );
 
-      // Generate thumbnail copy
+      // Generate thumbnail copy from cropped or original
       await _processor.generateThumbnail(
-        originalPath,
+        cropInputPath,
         thumbnailPath,
       );
 
@@ -206,6 +239,13 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
       try {
         await originalFile.delete();
       } catch (_) {}
+
+      // Delete temp cropped file if one was created
+      if (cropInputPath != originalPath) {
+        try {
+          await File(cropInputPath).delete();
+        } catch (_) {}
+      }
 
       final newPage = ScanPage(
         id: pageId,
@@ -215,6 +255,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
         thumbnailPath: thumbnailPath,
         capturedAt: DateTime.now(),
         pageOrder: _sessionPages.length,
+        cropPoints: cropPoints,
       );
 
       if (mounted) {
@@ -238,6 +279,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
   Future<void> _importFromGallery() async {
     if (_isCapturing) return;
     
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final s = appState.settings;
+
     try {
       final images = await _picker.pickMultiImage(imageQuality: 95);
       if (images.isEmpty) return;
@@ -253,18 +297,49 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
         // Copy source to original folder
         await File(image.path).copy(originalPath);
 
+        List<CropPoint> cropPoints = const [];
+        String cropInputPath = originalPath;
+
+        if (s.enableAutoCrop) {
+          cropPoints = await EdgeDetectionService.detectEdges(originalPath);
+          if (s.enableDeskew && cropPoints.isNotEmpty) {
+            try {
+              final bytes = await File(originalPath).readAsBytes();
+              final srcPoints = cropPoints.map((p) => Point<double>(p.x, p.y)).toList();
+              final transformed = PerspectiveTransformService.transform(
+                imageBytes: bytes,
+                srcPoints: srcPoints,
+              );
+              final tempDir = await getTemporaryDirectory();
+              final tempCroppedPath = '${tempDir.path}/${pageId}_cropped.png';
+              await File(tempCroppedPath).writeAsBytes(transformed);
+              cropInputPath = tempCroppedPath;
+            } catch (e) {
+              debugPrint('Auto crop transform error: $e');
+            }
+          }
+        }
+
         // Process default enhanced version
         await _processor.processImage(
-          originalPath,
+          cropInputPath,
           const EnhancementSettings(),
           processedPath,
+          appSettings: s,
         );
 
         // Generate thumbnail
         await _processor.generateThumbnail(
-          originalPath,
+          cropInputPath,
           thumbnailPath,
         );
+
+        // Delete temp cropped file if one was created
+        if (cropInputPath != originalPath) {
+          try {
+            await File(cropInputPath).delete();
+          } catch (_) {}
+        }
 
         final newPage = ScanPage(
           id: pageId,
@@ -274,6 +349,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
           thumbnailPath: thumbnailPath,
           capturedAt: DateTime.now(),
           pageOrder: _sessionPages.length,
+          cropPoints: cropPoints,
         );
 
         if (mounted) {

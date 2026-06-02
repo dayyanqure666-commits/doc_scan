@@ -3,8 +3,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../../core/models/scan_document.dart';
 import '../../core/models/scan_page.dart';
+import '../../core/services/app_state.dart';
 import '../../core/services/image_processor.dart';
 import '../../shared/theme/app_theme.dart';
 
@@ -41,10 +43,12 @@ class _EnhancementSheetState extends State<EnhancementSheet> {
     setState(() => _isProcessing = true);
     try {
       final outPath = widget.page.processedImagePath;
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
       final result = await ImageProcessor().processImage(
         widget.page.originalImagePath,
         _settings,
         outPath,
+        appSettings: appState.settings,
       );
       setState(() => _previewPath = result);
     } catch (e) {

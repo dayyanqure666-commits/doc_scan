@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import '../models/scan_document.dart';
+import 'app_state.dart';
 
 class ImageProcessor {
   static final ImageProcessor _instance = ImageProcessor._internal();
@@ -14,16 +15,25 @@ class ImageProcessor {
   Future<String> processImage(
     String inputPath,
     EnhancementSettings settings,
-    String outputPath,
-  ) async {
+    String outputPath, {
+    AppSettings? appSettings,
+  }) async {
     return await compute(
       _processInIsolate,
-      _ProcessArgs(inputPath, settings, outputPath),
+      _ProcessArgs(inputPath, settings, outputPath, appSettings),
     );
   }
 
   static Future<String> _processInIsolate(_ProcessArgs args) async {
     final bytes = await File(args.inputPath).readAsBytes();
+    
+    final appSet = args.appSettings;
+    // If all preprocessing options are disabled, copy original bytes directly and bypass everything
+    if (appSet != null && !appSet.hasAnyPreprocessingEnabled) {
+      await File(args.outputPath).writeAsBytes(bytes);
+      return args.outputPath;
+    }
+
     img.Image? image = img.decodeImage(bytes);
     if (image == null) throw Exception('Cannot decode image: ${args.inputPath}');
 
@@ -32,27 +42,30 @@ class ImageProcessor {
     image = _resizeForProcessing(image);
 
     // Step 2: Grayscale (document and whiteboard modes)
-    if (args.settings.mode == EnhancementMode.document ||
+    if ((args.settings.mode == EnhancementMode.document ||
         args.settings.mode == EnhancementMode.grayscale ||
-        args.settings.mode == EnhancementMode.whiteboard) {
+        args.settings.mode == EnhancementMode.whiteboard) &&
+        (appSet == null || appSet.enableGrayscale)) {
       image = img.grayscale(image);
     }
 
     // Step 3: Shadow removal via background normalization
-    if (args.settings.shadowRemoval) {
+    if (args.settings.shadowRemoval && (appSet == null || appSet.enableBackgroundCleanup)) {
       image = _removeShadows(image);
     }
 
     // Step 4: Adaptive thresholding (binarization for text clarity)
-    if (args.settings.threshold == ThresholdMode.adaptive) {
-      image = _adaptiveThreshold(image, blockSize: 21, C: 8);
-    } else if (args.settings.threshold == ThresholdMode.otsu) {
-      final t = _otsuThreshold(image);
-      image = _applyThreshold(image, t);
+    if (appSet == null || appSet.enableThresholding) {
+      if (args.settings.threshold == ThresholdMode.adaptive) {
+        image = _adaptiveThreshold(image, blockSize: 21, C: 8);
+      } else if (args.settings.threshold == ThresholdMode.otsu) {
+        final t = _otsuThreshold(image);
+        image = _applyThreshold(image, t);
+      }
     }
 
     // Step 5: Contrast enhancement
-    if (args.settings.contrast != 1.0) {
+    if (args.settings.contrast != 1.0 && (appSet == null || appSet.enableContrastEnhancement)) {
       image = img.adjustColor(image, contrast: args.settings.contrast);
     }
 
@@ -65,7 +78,7 @@ class ImageProcessor {
     }
 
     // Step 7: Sharpening (unsharp mask approximation)
-    if (args.settings.sharpness > 0.1) {
+    if (args.settings.sharpness > 0.1 && (appSet == null || appSet.enableSharpening)) {
       image = img.convolution(image,
           filter: _buildSharpenKernel(args.settings.sharpness),
           div: 1,
@@ -73,7 +86,7 @@ class ImageProcessor {
     }
 
     // Step 8: Denoising (light Gaussian blur after sharpening)
-    if (args.settings.denoise) {
+    if (args.settings.denoise && (appSet == null || appSet.enableNoiseReduction)) {
       image = img.gaussianBlur(image, radius: 1);
     }
 
@@ -278,5 +291,6 @@ class _ProcessArgs {
   final String inputPath;
   final EnhancementSettings settings;
   final String outputPath;
-  const _ProcessArgs(this.inputPath, this.settings, this.outputPath);
+  final AppSettings? appSettings;
+  const _ProcessArgs(this.inputPath, this.settings, this.outputPath, [this.appSettings]);
 }

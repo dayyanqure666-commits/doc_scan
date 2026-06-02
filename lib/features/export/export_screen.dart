@@ -46,15 +46,17 @@ class _ExportScreenState extends State<ExportScreen> {
 
     try {
       widget.document.name = _docName;
+      
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
       final pdfPath = await _generator.generate(
         widget.document,
         _quality,
         PDFGenerator.getPageFormat(_pageSize),
+        appSettings: appState.settings,
       );
 
       // Save to app state
       if (mounted) {
-        final appState = Provider.of<AppStateProvider>(context, listen: false);
         widget.document.pdfPath = pdfPath;
         await appState.addDocument(widget.document);
       }

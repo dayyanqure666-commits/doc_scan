@@ -52,6 +52,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
             String croppedPath,
             List<CropPoint> cropPoints,
           ) async {
+             final appState = Provider.of<AppStateProvider>(context, listen: false);
              final page = _doc.pages[_currentPage];
 
              final processor = ImageProcessor();
@@ -65,7 +66,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
              await processor.processImage(
               croppedPath,
               page.settings,
-             processedPath,
+              processedPath,
+              appSettings: appState.settings,
             ); 
               debugPrint('CROPPED PATH   : $croppedPath');
               debugPrint('PROCESSED PATH : $processedPath');

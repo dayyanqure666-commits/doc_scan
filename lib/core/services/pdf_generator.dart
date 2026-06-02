@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import '../models/scan_document.dart';
 import '../models/scan_page.dart';
+import 'app_state.dart';
 
 class PDFGenerator {
   static final PDFGenerator _instance = PDFGenerator._internal();
@@ -15,6 +16,7 @@ class PDFGenerator {
   ExportQuality quality,
   PdfPageFormat pageFormat, {
   void Function(int current, int total)? onProgress,
+  AppSettings? appSettings,
 }) async {
 
   // MAIN ISOLATE ONLY
@@ -43,6 +45,7 @@ class PDFGenerator {
       quality: quality,
       pageFormat: pageFormat,
       outputPath: outputPath,
+      appSettings: appSettings,
     ),
   );
 }
@@ -51,6 +54,8 @@ class PDFGenerator {
   static Future<String> _generateInIsolate(_PDFArgs args) async {
     final pdf = pw.Document(compress: true, version: PdfVersion.pdf_1_5);
 
+    final useOriginal = args.appSettings != null && !args.appSettings!.hasAnyPreprocessingEnabled;
+
     for (int i = 0; i < args.pages.length; i++) {
       final page = args.pages[i];
        debugPrint('====================');
@@ -58,9 +63,10 @@ class PDFGenerator {
        debugPrint('ORIGINAL : ${page.originalImagePath}');
        debugPrint('PROCESSED: ${page.processedImagePath}');
        debugPrint('====================');
-      final file = File(page.processedImagePath);
+      final imagePath = useOriginal ? page.originalImagePath : page.processedImagePath;
+      final file = File(imagePath);
       if (!file.existsSync()) {
-       debugPrint('FILE NOT FOUND: ${page.processedImagePath}');
+       debugPrint('FILE NOT FOUND: $imagePath');
        continue;
        }
 
@@ -138,11 +144,13 @@ class _PDFArgs {
   final ExportQuality quality;
   final PdfPageFormat pageFormat;
   final String outputPath;
+  final AppSettings? appSettings;
   const _PDFArgs({
     required this.documentName,
     required this.pages,
     required this.quality,
     required this.pageFormat,
     required this.outputPath,
+    this.appSettings,
   });
 }
