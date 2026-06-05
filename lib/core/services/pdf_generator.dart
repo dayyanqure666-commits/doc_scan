@@ -63,7 +63,16 @@ class PDFGenerator {
        debugPrint('ORIGINAL : ${page.originalImagePath}');
        debugPrint('PROCESSED: ${page.processedImagePath}');
        debugPrint('====================');
-      final imagePath = useOriginal ? page.originalImagePath : page.processedImagePath;
+      final hasManualEdits = page.cropPoints.isNotEmpty ||
+                             page.rotation != 0 ||
+                             page.settings.mode != EnhancementMode.auto ||
+                             page.settings.contrast != 1.2 ||
+                             page.settings.brightness != 0.0 ||
+                             page.settings.sharpness != 0.5 ||
+                             !page.settings.shadowRemoval ||
+                             !page.settings.denoise ||
+                             page.settings.threshold != ThresholdMode.adaptive;
+      final imagePath = (useOriginal && !hasManualEdits) ? page.originalImagePath : page.processedImagePath;
       final file = File(imagePath);
       if (!file.existsSync()) {
        debugPrint('FILE NOT FOUND: $imagePath');

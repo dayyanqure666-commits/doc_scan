@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import '../models/scan_document.dart';
+import '../models/scan_page.dart';
 import 'app_state.dart';
+import '../../features/crop/perspective_transform_service.dart';
 
 class ImageProcessor {
   static final ImageProcessor _instance = ImageProcessor._internal();
@@ -17,25 +19,76 @@ class ImageProcessor {
     EnhancementSettings settings,
     String outputPath, {
     AppSettings? appSettings,
+    List<CropPoint>? cropPoints,
+    int rotation = 0,
+    bool isManualEdit = false,
   }) async {
     return await compute(
       _processInIsolate,
-      _ProcessArgs(inputPath, settings, outputPath, appSettings),
+      _ProcessArgs(
+        inputPath: inputPath,
+        settings: settings,
+        outputPath: outputPath,
+        appSettings: appSettings,
+        cropPoints: cropPoints,
+        rotation: rotation,
+        isManualEdit: isManualEdit,
+      ),
     );
   }
 
+  Future<String> processPage(
+    ScanPage page, {
+    AppSettings? appSettings,
+  }) async {
+    final processedPath = await getProcessedPath(page.documentId, page.id);
+    await processImage(
+      page.originalImagePath,
+      page.settings,
+      processedPath,
+      appSettings: appSettings,
+      cropPoints: page.cropPoints,
+      rotation: page.rotation,
+      isManualEdit: true,
+    );
+    final thumbnailPath = await getThumbnailPath(page.documentId, page.id);
+    await generateThumbnail(processedPath, thumbnailPath);
+    return processedPath;
+  }
+
   static Future<String> _processInIsolate(_ProcessArgs args) async {
-    final bytes = await File(args.inputPath).readAsBytes();
+    Uint8List bytes = await File(args.inputPath).readAsBytes();
     
     final appSet = args.appSettings;
     // If all preprocessing options are disabled, copy original bytes directly and bypass everything
-    if (appSet != null && !appSet.hasAnyPreprocessingEnabled) {
+    if (!args.isManualEdit && appSet != null && !appSet.hasAnyPreprocessingEnabled) {
       await File(args.outputPath).writeAsBytes(bytes);
       return args.outputPath;
     }
 
+    // Apply crop (Perspective Transform) if cropPoints is provided and not empty
+    if (args.cropPoints != null && args.cropPoints!.isNotEmpty) {
+      final srcPoints = args.cropPoints!.map((p) => Point<double>(p.x, p.y)).toList();
+      final isDefault = srcPoints.length == 4 &&
+          srcPoints[0].x == 0.0 && srcPoints[0].y == 0.0 &&
+          srcPoints[1].x == 1.0 && srcPoints[1].y == 0.0 &&
+          srcPoints[2].x == 1.0 && srcPoints[2].y == 1.0 &&
+          srcPoints[3].x == 0.0 && srcPoints[3].y == 1.0;
+      if (!isDefault) {
+        bytes = PerspectiveTransformService.transform(
+          imageBytes: bytes,
+          srcPoints: srcPoints,
+        );
+      }
+    }
+
     img.Image? image = img.decodeImage(bytes);
     if (image == null) throw Exception('Cannot decode image: ${args.inputPath}');
+
+    // Apply rotation if rotation is not 0
+    if (args.rotation != 0) {
+      image = img.copyRotate(image, angle: args.rotation);
+    }
 
     // Step 1: Resize to 2MP max for processing speed (save memory)
     // Keeps enough resolution for OCR (200+ DPI equivalent)
@@ -241,7 +294,13 @@ class ImageProcessor {
   ) async {
     return await compute(
       _generateThumbnailInIsolate,
-      _ProcessArgs(inputPath, const EnhancementSettings(), outputPath),
+      _ProcessArgs(
+        inputPath: inputPath,
+        settings: const EnhancementSettings(),
+        outputPath: outputPath,
+        rotation: 0,
+        isManualEdit: false,
+      ),
     );
   }
 
@@ -269,21 +328,21 @@ class ImageProcessor {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory('${appDir.path}/documents/doc_$docId/processed');
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    return '${dir.path}/${pageId}_processed.jpg';
+    return '${dir.path}/${pageId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
   }
 
   Future<String> getThumbnailPath(String docId, String pageId) async {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory('${appDir.path}/documents/doc_$docId/thumbnails');
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    return '${dir.path}/${pageId}_thumbnail.jpg';
+    return '${dir.path}/${pageId}_${DateTime.now().millisecondsSinceEpoch}_thumbnail.jpg';
   }
 
   Future<String> getOriginalPath(String docId, String pageId) async {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory('${appDir.path}/documents/doc_$docId/original');
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    return '${dir.path}/${pageId}_original.jpg';
+    return '${dir.path}/${pageId}_${DateTime.now().millisecondsSinceEpoch}_original.jpg';
   }
 }
 
@@ -292,5 +351,17 @@ class _ProcessArgs {
   final EnhancementSettings settings;
   final String outputPath;
   final AppSettings? appSettings;
-  const _ProcessArgs(this.inputPath, this.settings, this.outputPath, [this.appSettings]);
+  final List<CropPoint>? cropPoints;
+  final int rotation;
+  final bool isManualEdit;
+
+  const _ProcessArgs({
+    required this.inputPath,
+    required this.settings,
+    required this.outputPath,
+    this.appSettings,
+    this.cropPoints,
+    required this.rotation,
+    required this.isManualEdit,
+  });
 }

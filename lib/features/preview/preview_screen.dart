@@ -24,7 +24,7 @@ class PreviewScreen extends StatefulWidget {
 class _PreviewScreenState extends State<PreviewScreen> {
   late ScanDocument _doc;
   int _currentPage = 0;
-
+  int _imageVersion = 0;
   @override
   void initState() {
     super.initState();
@@ -54,33 +54,25 @@ class _PreviewScreenState extends State<PreviewScreen> {
           ) async {
              final appState = Provider.of<AppStateProvider>(context, listen: false);
              final page = _doc.pages[_currentPage];
+             page.originalImagePath = croppedPath;
+             page.cropPoints = List<CropPoint>.from(cropPoints);
 
              final processor = ImageProcessor();
+             final processedPath = await processor.processPage(
+               page,
+               appSettings: appState.settings,
+             );
 
-             final processedPath =
-             await processor.getProcessedPath(
-             page.documentId,
-             page.id,
-            );
-
-             await processor.processImage(
-              croppedPath,
-              page.settings,
-              processedPath,
-              appSettings: appState.settings,
-            ); 
-              debugPrint('CROPPED PATH   : $croppedPath');
-              debugPrint('PROCESSED PATH : $processedPath');
-
-            setState(() {
-              final page = _doc.pages[_currentPage];
-               page.processedImagePath = processedPath;
-               page.cropPoints = List<CropPoint>.from(cropPoints);
-               debugPrint(
-                  'FINAL PAGE PATH : ${page.processedImagePath}',
-              );
-            });
-            await _autoSave();
+             PaintingBinding.instance.imageCache.clear();
+             PaintingBinding.instance.imageCache.clearLiveImages();
+             setState(() {
+                page.processedImagePath = processedPath;
+                debugPrint(
+                   'FINAL PAGE PATH : ${page.processedImagePath}',
+               );
+                 _imageVersion++;
+             });
+             await _autoSave();
           },
         ),
       ),
@@ -97,19 +89,40 @@ class _PreviewScreenState extends State<PreviewScreen> {
     );
 
     if (updatedPage != null) {
+      final processor = ImageProcessor();
+      final thumbnailPath = await processor.getThumbnailPath(updatedPage.documentId, updatedPage.id);
+      await processor.generateThumbnail(updatedPage.processedImagePath, thumbnailPath);
+      updatedPage.thumbnailPath = thumbnailPath;
+
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+
       setState(() {
         _doc.pages[_currentPage] = updatedPage;
+          _imageVersion++;
       });
       await _autoSave();
     }
   }
 
-  void _rotatePage() {
+  Future<void> _rotatePage() async {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final page = _doc.pages[_currentPage];
+    page.rotation = (page.rotation + 90) % 360;
+
+    final processor = ImageProcessor();
+    final processedPath = await processor.processPage(
+      page,
+      appSettings: appState.settings,
+    );
+
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
     setState(() {
-      final page = _doc.pages[_currentPage];
-      page.rotation = (page.rotation + 90) % 360;
+      page.processedImagePath = processedPath;
+        _imageVersion++;
     });
-    _autoSave();
+    await _autoSave();
   }
 
   void _deletePage() {
@@ -227,6 +240,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: Image.file(
                             imageFile,
+                            key: ValueKey(
+                              '${page.processedImagePath}_${DateTime.now().millisecondsSinceEpoch}_${_imageVersion}',
+                            ),
                             fit: BoxFit.contain,
                           ),
                         ),
@@ -290,7 +306,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         ),
                       ),
                       child: RotatedBox(
-                        quarterTurns: p.rotation ~/ 90,
+                        quarterTurns: page.rotation ~/ 90,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: Image.file(

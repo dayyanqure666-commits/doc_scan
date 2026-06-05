@@ -1,16 +1,12 @@
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/models/scan_page.dart';
-import '../../core/services/app_state.dart';
 import '../crop/crop_controller.dart';
 import '../crop/crop_painter.dart';
 import '../crop/perspective_transform_service.dart';
-import 'package:docscan/core/services/image_processor.dart';
 /// Screen for manual crop editing.
 ///
 /// Receives the [page] to edit.
@@ -61,49 +57,30 @@ class _CropScreenState extends State<CropScreen> {
 
     try {
       final imagePath =
-         widget.page.processedImagePath.isNotEmpty &&
-            File(widget.page.processedImagePath).existsSync()
-        ? widget.page.processedImagePath
-        : widget.page.originalImagePath;
-
-      final appState = Provider.of<AppStateProvider>(context, listen: false);
-      final s = appState.settings;
-
+          widget.page.processedImagePath.isNotEmpty
+            ? widget.page.processedImagePath
+            : widget.page.originalImagePath;
       final bytes = await File(imagePath).readAsBytes();
 
-      Uint8List transformed;
-      if (s.enableDeskew) {
-        final srcPoints =
-            _controller.points
-                .map(
-                  (p) => Point<double>(p.x, p.y),
-                )
-                .toList();
+      final srcPoints =
+          _controller.points
+              .map(
+                (p) => Point<double>(p.x, p.y),
+              )
+              .toList();
 
-        transformed =
-             PerspectiveTransformService.transform(
-              imageBytes: bytes,
-              srcPoints: srcPoints,
-            );
-      } else {
-        transformed = bytes;
-      }
+      final transformed =
+           PerspectiveTransformService.transform(
+            imageBytes: bytes,
+            srcPoints: srcPoints,
+          );
 
       final dir = await getApplicationDocumentsDirectory();
-
       final newFileName = '${const Uuid().v4()}.png';
-
       final newPath = '${dir.path}/$newFileName';
 
       await File(newPath).writeAsBytes(transformed);
-      final page = widget.page;
 
-      await ImageProcessor().processImage(
-        newPath,
-        page.settings,
-        newPath,
-        appSettings: s,
-      );
       widget.onDone(
         newPath,
         _controller.points,
@@ -125,12 +102,7 @@ class _CropScreenState extends State<CropScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final imageFile = File(
-      widget.page.processedImagePath.isNotEmpty &&
-          File(widget.page.processedImagePath).existsSync()
-      ? widget.page.processedImagePath
-      : widget.page.originalImagePath,
-    );
+    final imageFile = File(widget.page.originalImagePath);
 
     return Scaffold(
       appBar: AppBar(

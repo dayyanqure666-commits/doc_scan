@@ -43,14 +43,40 @@ class _EnhancementSheetState extends State<EnhancementSheet> {
     setState(() => _isProcessing = true);
     try {
       final outPath = widget.page.processedImagePath;
+      debugPrint(
+           'INPUT IMAGE: ${widget.page.originalImagePath}',
+      );
+
+      debugPrint(
+      'OUTPUT IMAGE: $outPath',
+      );
+ 
       final appState = Provider.of<AppStateProvider>(context, listen: false);
       final result = await ImageProcessor().processImage(
         widget.page.originalImagePath,
         _settings,
         outPath,
         appSettings: appState.settings,
+        cropPoints: widget.page.cropPoints,
+        rotation: widget.page.rotation,
+        isManualEdit: true,
       );
-      setState(() => _previewPath = result);
+       debugPrint(
+       'RESULT IMAGE: $result',
+      );
+
+       debugPrint(
+       'FILE EXISTS: ${File(result).existsSync()}',
+      );
+      if (File(result).existsSync()) {
+       debugPrint(
+       'FILE SIZE: ${File(result).lengthSync()}',
+      );
+     }
+
+      setState(() {
+          _previewPath = result;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -60,7 +86,7 @@ class _EnhancementSheetState extends State<EnhancementSheet> {
     } finally {
       setState(() => _isProcessing = false);
     }
-  }
+  } 
 
   void _confirm() {
     final updatedPage = ScanPage(
@@ -122,7 +148,22 @@ class _EnhancementSheetState extends State<EnhancementSheet> {
             clipBehavior: Clip.antiAlias,
             child: _previewPath != null
                 ? Image.file(File(_previewPath!), fit: BoxFit.contain,
-                    key: ValueKey(_previewPath))
+                    key: ValueKey(_previewPath),
+                    errorBuilder: (
+                       BuildContext context,
+                        Object error,
+                        StackTrace? stackTrace,
+                      ) {
+                        debugPrint('IMAGE ERROR: $error');
+
+                        return Center(
+                          child: Text(
+                          error.toString(),
+                          textAlign: TextAlign.center,
+                       ),
+                     );
+                   },
+                )
                 : const Center(child: Icon(Icons.image_outlined)),
           ).animate(key: ValueKey(_previewPath)).fadeIn(duration: 200.ms),
 
