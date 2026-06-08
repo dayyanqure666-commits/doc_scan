@@ -7,6 +7,7 @@ import '../../core/services/app_state.dart';
 import '../../core/services/pdf_generator.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../home/home_screen.dart';
+import '../../db/repositories/scan_repository.dart';
 
 class ExportScreen extends StatefulWidget {
   final ScanDocument document;
@@ -58,6 +59,11 @@ class _ExportScreenState extends State<ExportScreen> {
       // Save to app state
       if (mounted) {
         widget.document.pdfPath = pdfPath;
+        try {
+          await ScanRepository().insertScan(widget.document);
+        } catch (e) {
+          debugPrint('SQLite insert error: $e');
+        }
         await appState.addDocument(widget.document);
       }
 

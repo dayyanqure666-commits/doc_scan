@@ -235,13 +235,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     tag: 'preview_${page.id}',
                     child: InteractiveViewer(
                       child: RotatedBox(
-                        quarterTurns: page.rotation ~/ 90,
+                        quarterTurns:0,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.file(
                             imageFile,
                             key: ValueKey(
-                              '${page.processedImagePath}_${DateTime.now().millisecondsSinceEpoch}_${_imageVersion}',
+                              '${page.processedImagePath}_${DateTime.now().millisecondsSinceEpoch}_$_imageVersion',
                             ),
                             fit: BoxFit.contain,
                           ),
@@ -306,7 +306,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         ),
                       ),
                       child: RotatedBox(
-                        quarterTurns: page.rotation ~/ 90,
+                        quarterTurns:0,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: Image.file(

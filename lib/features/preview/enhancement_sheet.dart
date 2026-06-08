@@ -216,7 +216,7 @@ class _EnhancementSheetState extends State<EnhancementSheet> {
                 _SliderRow(
                   label: 'Brightness',
                   value: _settings.brightness,
-                  min: -0.5, max: 0.5,
+                  min: -0.2, max: 0.2,
                   onChanged: (v) => setState(() =>
                     _settings = _settings.copyWith(brightness: v)),
                   onChangeEnd: (_) => _applySettings(),
