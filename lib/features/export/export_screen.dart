@@ -8,6 +8,7 @@ import '../../core/services/pdf_generator.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../home/home_screen.dart';
 import '../../db/repositories/scan_repository.dart';
+import '../../auth/auth_service.dart';
 
 class ExportScreen extends StatefulWidget {
   final ScanDocument document;
@@ -60,6 +61,8 @@ class _ExportScreenState extends State<ExportScreen> {
       if (mounted) {
         widget.document.pdfPath = pdfPath;
         try {
+          final currentUser = await AuthService().getCurrentUser();
+          widget.document.userId = currentUser?.id;
           await ScanRepository().insertScan(widget.document);
         } catch (e) {
           debugPrint('SQLite insert error: $e');

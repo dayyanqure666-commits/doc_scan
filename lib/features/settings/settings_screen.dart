@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import '../../core/models/scan_document.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/storage_service.dart';
+import '../../auth/auth_service.dart';
+import '../../models/user_model.dart';
+import '../../screens/login_screen.dart';
+import '../../shared/theme/app_theme.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -16,6 +20,7 @@ class SettingsScreen extends StatelessWidget {
           appBar: AppBar(title: const Text('Settings')),
           body: ListView(
             children: [
+              const _AccountSection(),
               const _SectionHeader('Scanning'),
               _SwitchTile(
                 title: 'Auto-Capture',
@@ -258,5 +263,110 @@ class _SelectTile extends StatelessWidget {
         onChanged: (v) => v != null ? onChanged(v) : null,
       ),
     );
+  }
+}
+
+class _AccountSection extends StatelessWidget {
+  const _AccountSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<UserModel?>(
+      future: AuthService().getCurrentUser(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 60,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        final user = snapshot.data;
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+
+        if (user != null) {
+          // Logged in
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SectionHeader('Account'),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.primary,
+                  child: Icon(Icons.person, color: Colors.white),
+                ),
+                title: Text(
+                  user.email,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Logged in'),
+                trailing: TextButton(
+                  onPressed: () => _handleLogout(context),
+                  child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+                ),
+              ),
+            ],
+          );
+        } else {
+          // Guest mode
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SectionHeader('Account'),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isDark ? const Color(0xFF334155) : Colors.grey.shade200,
+                  child: Icon(Icons.person_outline, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                ),
+                title: const Text(
+                  'Guest User',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Sync disabled'),
+                trailing: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (_) => false,
+                    );
+                  },
+                  child: const Text('Sign In'),
+                ),
+              ),
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  void _handleLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await AuthService().logout();
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (_) => false,
+        );
+      }
+    }
   }
 }

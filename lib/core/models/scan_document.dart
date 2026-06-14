@@ -105,6 +105,7 @@ class ScanDocument {
   int fileSizeBytes;
   String? pdfPath;
   ExportQuality quality;
+  String? userId;
 
   ScanDocument({
     required this.id,
@@ -116,6 +117,7 @@ class ScanDocument {
     this.fileSizeBytes = 0,
     this.pdfPath,
     this.quality = ExportQuality.standard,
+    this.userId,
   });
 
   int get pageCount => pages.length;
@@ -140,6 +142,7 @@ class ScanDocument {
     'page_count': pageCount,
     'file_size_bytes': fileSizeBytes,
     'pages': pages.map((p) => p.toMap()).toList(),
+    'user_id': userId,
   };
 
   factory ScanDocument.fromMap(Map<String, dynamic> map) {
@@ -153,6 +156,7 @@ class ScanDocument {
       pdfPath: map['pdf_path'],
       quality: ExportQuality.values[map['quality'] ?? 1],
       fileSizeBytes: map['file_size_bytes'] ?? 0,
+      userId: map['user_id'],
     );
     if (map['pages'] != null) {
       doc.pages = (map['pages'] as List)
